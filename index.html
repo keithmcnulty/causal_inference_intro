@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>Introduction to Causal Inference</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Keith McNulty" />
+    <script src="libs/header-attrs/header-attrs.js"></script>
+    <link rel="stylesheet" href="style.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# Introduction to Causal Inference
+### Keith McNulty
+
+---
+
+
+
+
+class: left, middle, r-logo
+
+## Formalities
+
+* Much of this presentation is based on the book "Statistical Rethinking" by Richard McElreath
+* You can find the code for this presentation at its github repo [here](https://github.com/keithmcnulty/causal_inference_intro)
+* The data for the US divorce rate example is available in the `rethinking` R package: `data("WaffleDivorce")`
+
+
+---
+class: left, middle, r-logo
+
+## What is causal inference?
+
+Here are two common reasons why we construct statistical models on samples of data:
+
+1.  To try to make accurate out of sample predictions (*Predictive Modeling*)
+2.  To try to explain a phenomenon by inferring causality from the sample (*Inferential Modeling*)
+
+How we approach these two objectives can be very different in practice.
+
+**Causal Inference** is the science of inferring causality from statistical models.  It is a very disciplined approach to inferential modeling, focused on the avoidance of 'booby traps' in causal logic. 
+
+---
+class: left, middle, r-logo
+
+## How do we conceptually represent causality?
+
+Causality (or our beliefs around causality) can be represented by a **directed acyclic graph** or **DAG**.  Directed, because causality is always in a certain direction, and acyclic because  we don't imagine that a cause causes itself.
+
+Here's a simple example:  imagine you work for *McDonalds*.  Let `\(R\)` be your hourly pay rate, let `\(H\)` be how many hours you work in the week, and let `\(P\)` be your weekly total pay.  Then we can create the following simple DAG to represent the causes of `\(P\)`:
+
+&lt;img src="index_files/figure-html/unnamed-chunk-1-1.png" height="300" style="display: block; margin: auto;" /&gt;
+
+---
+class: left, middle, r-logo
+
+
+## Creating DAGs in R
+
+There are a number of package options, but `dagitty` is easy to use and has some cool additional functionality which we will use later.
+
+
+```r
+library(dagitty)
+mcd_dag &lt;- dagitty("dag{H -&gt; P; R -&gt; P}")
+coordinates(mcd_dag) &lt;- list(
+  x = c(H = 0, R = 0, P = 1), 
+  y = c(R = 0, H = 1, P = 0.5)
+)
+plot(mcd_dag)
+```
+
+&lt;img src="index_files/figure-html/unnamed-chunk-2-1.png" height="300" style="display: block; margin: auto;" /&gt;
+
+---
+class: left, middle, r-logo
+
+## Waffle Houses and Divorce Rates in US states
+
+&lt;img src="index_files/figure-html/unnamed-chunk-3-1.png" style="display: block; margin: auto;" /&gt;
+
+
+---
+class: left, middle, r-logo
+
+## Which DAG is a more believable explanation of the Waffle House phenomenon?
+
+In these DAGs, a circled variable means a variable which is as yet unknown/unobserved.
+
+&lt;img src="index_files/figure-html/unnamed-chunk-4-1.png" width="50%" /&gt;&lt;img src="index_files/figure-html/unnamed-chunk-4-2.png" width="50%" /&gt;
+
+---
+class: left, middle, r-logo
+
+
+## Statistical models and causal theories
+
+We can use statistical models to lend support to our theories of causality.  Though models can never prove a causal relationship, they can show that certain variables influence an outcome, which can support a theoretical causal model under the right conditions. 
+
+However, there is a really big difference between these two things:
+
+1.  Showing that a variable has an observed *association* with an outcome (this is simply a correlation)
+2.  Generating statistical support for a theory that a variable may have a *causal influence* on an outcome (this requires more than a correlation).
+
+
+---
+class: left, middle, r-logo
+
+## Booby trap 1:  The Fork (Collinearity)
+
+In a DAG, we only draw an arrow between two variables when we believe there to be an **independent** causal influence between two variables.  Variables can still be associated even though they are not connected in a DAG.  
+
+Imagine we are trying to understand the causal influence of the average age at marriage `\(A\)` and the marriage rate `\(M\)` on divorce rate `\(D\)` in US states.  We construct the following DAG based on our belief around causality:
+
+&lt;img src="index_files/figure-html/unnamed-chunk-5-1.png" height="300" style="display: block; margin: auto;" /&gt;
+
+
+---
+class: left, middle, r-logo
+
+## Conditional independence
+
+In our proposed DAG, `\(A\)` has a causal influence on `\(M\)` and on `\(D\)`.  But `\(M\)` **does not** have an independent causal influence on `\(D\)`.  `\(M\)` can still be associated with `\(D\)` statistically, but only because they have similar causation.  
+
+In this case, we say ** `\(D\)` is independent of `\(M\)` conditional on `\(A\)` **.  We write this mathematically as `\(D \!\perp\!\!\!\perp M|A\)`.
+
+The `dagitty` package can determine all conditional independencies in a DAG:
+
+
+```r
+dag1 &lt;- dagitty(
+  "dag{A -&gt; D; A -&gt;M}"
+)
+impliedConditionalIndependencies(dag1)
+```
+
+```
+## D _||_ M | A
+```
+
+
+
+
+---
+class: left, middle, r-logo
+
+## You model construction will depend on your DAG
+
+Let's build a model to support that `\(M\)` is independent  of `\(D\)` conditional on `\(A\)`.  This means we must include both `\(M\)` and `\(A\)` as input variables, with `\(D\)` as our output variable.  Here are simulations of the posterior coefficients of linear model D ~ A + M. You can see the code for this in the source on Github.  
+
+
+&lt;img src="index_files/figure-html/unnamed-chunk-7-1.png" height="400" style="display: block; margin: auto;" /&gt;
+
+---
+class: left, middle, r-logo
+
+## Post-treatment bias
+
+Imagine we are growing some roses.  Unfortunately our roses are prone to getting blackspot, a bad disease which prevents the leaves absorbing light.
+
+Never fear, we have an incredible spray which kills blackspot on roses. The more we spray, the less blackspot will appear.  The less blackspot, the more the roses can grow.  
+
+Let's simulate some data to represent this.
+
+---
+class: left, middle, r-logo
+
+## Simulating rose data
+
+
+```r
+n &lt;- 100
+
+set.seed(42)
+d &lt;- tibble(
+  h0 = rnorm(n, mean = 10, sd = 2), 
+  spray = rep(0:1, each = n / 2),
+  blackspot = rbinom(n, size = 1, prob = .5 - spray * 0.4),
+  h1 = h0 + rnorm(n, mean = 5 - 3 * blackspot, sd = 1)
+)
+```
+
+
+---
+class: left, middle, r-logo
+
+## Now run a linear model and look at the posterior coefficients
+
+&lt;img src="index_files/figure-html/unnamed-chunk-9-1.png" height="400" style="display: block; margin: auto;" /&gt;
+
+
+
+---
+class: left, middle, r-logo
+
+## Booby trap 2: The Pipe (Post-treatment bias)
+
+The most believable causal theory is that the amount of spray `\(S\)` reduces the amount of blackspot `\(B\)` which results in better rose growth `\(G\)`, or:
+
+&lt;img src="index_files/figure-html/unnamed-chunk-10-1.png" height="300" style="display: block; margin: auto;" /&gt;
+
+What are the conditional independencies in this pipe?
+
+---
+class: left, middle, r-logo
+
+## Conditional independencies in a pipe
+
+
+```r
+dag2 &lt;- dagitty(
+  "dag{S -&gt; B; B -&gt; G}"
+)
+impliedConditionalIndependencies(dag2)
+```
+
+```
+## G _||_ S | B
+```
+
+In other words, if we condition on `\(B\)` (blackspot), we conclude that there is no causal effect of `\(S\)` (spray) on `\(G\)` (growth), which is a false conclusion. This is because if we know the degree of blackspot, knowing the amount of spray tells us nothing further.  Conditioning on `\(B\)` 'blocks the path'.  
+
+So if we want to causally relate two variables on either ends of a pipe, we should not condition on the middle variable.
+
+---
+class: left, middle, r-logo
+
+## Sample bias
+
+Imagine we have been hiring some people into our company for a few years.  We hired them, `\(H\)`, on the basis of an assessment of their problem solving ability, `\(P\)` and a separate assessment of their interpersonal skills, `\(I\)`.  
+
+&lt;img src="index_files/figure-html/unnamed-chunk-12-1.png" height="300" style="display: block; margin: auto;" /&gt;
+
+Let's construct some data to reflect this.  In this data, `\(P\)` and `\(I\)` will be constructed to be independent of each other, and `\(H\)` will be determined based on the sum of `\(P\)` and `\(I\)`.
+
+---
+class: left, middle, r-logo
+
+## Simulate selection data
+
+
+```r
+set.seed(43)
+N &lt;- 1000 # candidates
+p &lt;- 0.1 # selection rate
+P &lt;- rnorm(N) # random normal distribution
+I &lt;- rnorm(N) # random normal distribution
+Total &lt;- P + I
+q &lt;- quantile(Total, 1 - p) # select hired based on sum of scores
+H &lt;- ifelse(Total &gt;= q, TRUE, FALSE)
+```
+
+Now lets test for independence of `\(P\)` and `\(I\)` in our sample:
+
+
+```r
+cor(P, I)
+```
+
+```
+## [1] 0.04794271
+```
+
+Now, an enthusiastic people analytics professional decides to ask if good problem-solvers have bad interpersonal skills, and tests the hypothesis on their company employees using recruiting data:
+
+
+```r
+(correl &lt;- cor(P[H == TRUE], I[H == TRUE]))
+```
+
+```
+## [1] -0.6823684
+```
+
+---
+class: left, middle, r-logo
+
+## Conditioning on the third variable can result in false inferences
+
+&lt;img src="index_files/figure-html/unnamed-chunk-16-1.png" height="500" style="display: block; margin: auto;" /&gt;
+
+---
+class: left, middle, r-logo
+
+## Booby trap 3:  The Collider
+
+Our enthusiastic analyst might conclude that they have support for a causal relationship between `\(P\)` and `\(I\)`, but this is only because they have conditioned on `\(H\)` by only analyzing employees who have been hired.
+
+
+```r
+dag3 &lt;- dagitty(
+  "dag{P -&gt; H &lt;- I}"
+)
+impliedConditionalIndependencies(dag3)
+```
+
+```
+## I _||_ P
+```
+
+If we are trying to support causal independence between `\(I\)` and `\(P\)`, we **must not include `\(H\)` in our model**.
+
+
+---
+class: left, middle, r-logo
+
+## Booby trap 4: The Descendant Collider
+
+Let"s add a causal layer to our employee selection example.  Let `\(D\)` be the decision to make a job offer and let `\(A\)` be the acceptance of a job offer.  Our DAG might then look like this:
+
+
+&lt;img src="index_files/figure-html/unnamed-chunk-18-1.png" height="300" style="display: block; margin: auto;" /&gt;
+
+
+Since `\(H\)` is the descendant of collider `\(D\)`, any attempt to causally model `\(P\)` against `\(H\)` or `\(I\)` against `\(H\)` must not condition on `\(D\)`. 
+
+---
+class: left, middle, r-logo
+
+## Getting complicated right?  But there is good news!
+
+Given any DAG, and given any two variables which we are trying to causally relate, we can follow a simple process to determine what to include in our causal model.
+
+Let `\(A\)` be our input (cause) variable and `\(B\)` be our outcome (effect) variable.  Follow these steps to determine what additional variables to include in your causal model:
+
+1.  List all (undirected) paths from `\(A\)` to `\(B\)`. 
+2.  Consider a path closed if it contains a collider.  Otherwise consider it open.
+3.  Determine if any open paths have an arrow pointing to `\(A\)`.  This is called a **backdoor path**.
+4.  Select variables to condition on in order to close those open backdoor paths. 
+5.  Include these variables in addition to `\(A\)` and `\(B\)` in your model.
+
+---
+class: left, middle, r-logo
+
+## Fun exercise: Divorce, Waffles and 'Southern-ness'
+
+We are now going to propose a wider DAG to try to support causality of divorce rates `\(D\)` in US states.  In addition to average age at marriage `\(A\)`, marriage rate `\(M\)`, and number of Waffle Houses `\(W\)`, we are now going to introduce the 'Southern-ness' of states `\(S\)` as a binary variable (in case all y'all don't know, a state is either a Southern state or it is not!).  Here is our proposed DAG:
+
+&lt;img src="index_files/figure-html/unnamed-chunk-19-1.png" height="300" style="display: block; margin: auto;" /&gt;
+
+---
+class: left, middle, r-logo
+
+## Class exercise
+
+What variables should we condition on if we want to support:
+
+1.  Waffle Houses as a cause of divorce rates
+2.  Southern-ness as a cause of divorce rates
+
+
+---
+class: left, middle, r-logo
+
+## Let's answer the Waffle House question first
+
+Using the magic of `dagitty`, we can determine our conditioning variables.
+
+
+```r
+dag3 &lt;- dagitty(
+  "dag{A -&gt; D; 
+       A -&gt; M -&gt; D;
+       A &lt;- S -&gt; M;
+       S -&gt; W -&gt; D}"
+)
+dagitty::adjustmentSets(dag3, exposure = "W", outcome = "D")
+```
+
+```
+## { A, M }
+## { S }
+```
+
+So we have two options:  include `\(S\)` or include `\(A\)` and `\(M\)`.  Let's take the easiest option and include `\(S\)`.
+
+
+---
+class: left, middle, r-logo
+
+## Is there support for Waffle Houses causing divorce?
+
+&lt;img src="index_files/figure-html/unnamed-chunk-21-1.png" style="display: block; margin: auto;" /&gt;
+
+---
+class: left, middle, r-logo
+
+## Now the 'Southern-ness' question
+
+Again let's confirm our conditioning variables using `dagitty`:
+
+
+```r
+dagitty::adjustmentSets(dag3, exposure = "S", outcome = "D")
+```
+
+```
+##  {}
+```
+
+Makes sense as there are no backdoor paths originating at `\(S\)`, so this is a straight linear model with a single input variable.  The simulated posteriors of the coefficient of `\(S\)` look like this:
+
+&lt;img src="index_files/figure-html/unnamed-chunk-23-1.png" height="300" style="display: block; margin: auto;" /&gt;
+
+---
+class: left, middle, r-logo
+
+## Conclusions and references
+
+1.  Causal inference is hard and a bit mind-bending 
+2.  If you work in predictive analytics you don't have to worry about it too much
+3.  If you work in explanatory analytics it's a very valuable skill and teaches a disciplined approach to modelling
+4.  I highly recommend [Statistical Rethinking](https://www.amazon.com/Statistical-Rethinking-Bayesian-Examples-Chapman/dp/1482253445) by Richard McElreath.  An outstanding book but not for the statistically fainthearted.
+5.  If you are attending the RStudio conference and feel brave enough, consider the [Causal Inference in R Workshop](https://www.rstudio.com/conference/2022/workshops/causal-inference-rstats/)
+
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true,
+"countIncrementalSlides": false
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
